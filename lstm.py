@@ -6,18 +6,18 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from tensorflow.keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import r2_score
 
 st.title("📈 LSTM Time Series Demo")
 
 # ----------------------
 # Upload main dataset
 # ----------------------
-st.subheader("📂 Upload Training Data")
+st.subheader("📂 Upload Training Data (CSV or Excel)")
 main_file = st.file_uploader("Upload a CSV or Excel file", type=['csv', 'xlsx', 'xls'])
 
 if main_file is not None:
-    # Check extension
+    # Load file based on extension
     if main_file.name.endswith(".csv"):
         df_series = pd.read_csv(main_file)
     else:
@@ -31,13 +31,15 @@ if main_file is not None:
     # Use the selected column
     series = df_series[[col_choice]]
 
-    # Plot input series before training
+    # Plot input series (downsample if large)
     fig, ax = plt.subplots()
-    ax.plot(series[col_choice], label='Input Series', color='blue')
+    if len(series) > 2000:
+        ax.plot(series[col_choice].iloc[::10], label='Input Series (sampled)', color='blue')
+    else:
+        ax.plot(series[col_choice], label='Input Series', color='blue')
     ax.set_title(f"Raw Input Time Series ({col_choice})")
     ax.legend()
     st.pyplot(fig)
-
 
     # ----------------------
     # Model Hyperparameters
@@ -46,17 +48,17 @@ if main_file is not None:
 
     window_size = st.slider("Window Size", min_value=5, max_value=50, value=20)
     num_neurons = st.slider("Number of LSTM Neurons", min_value=10, max_value=200, value=50, step=10)
-
     num_layers = st.slider("Number of LSTM Layers", min_value=1, max_value=3, value=1)
     activation_fn = st.selectbox("Activation Function", ["tanh", "relu", "sigmoid"])
-    learning_rate = st.slider("Learning Rate", min_value=0.0001, max_value=0.01, value=0.001, step=0.0001, format="%.4f")
+    learning_rate = st.slider("Learning Rate", min_value=0.0001, max_value=0.01,
+                              value=0.001, step=0.0001, format="%.4f")
     batch_size = st.slider("Batch Size", min_value=8, max_value=128, value=16, step=8)
     num_epochs = st.slider("Epochs", min_value=5, max_value=100, value=10, step=5)
     loss_fn = st.selectbox("Loss Function", ["mse", "mae"])
 
     # Scale the full series
     scaler = MinMaxScaler()
-    scaled_series = scaler.fit_transform(df_series[['value']].values)
+    scaled_series = scaler.fit_transform(series.values.reshape(-1, 1))
 
     # Split train/test (80/20)
     train_size = int(len(scaled_series) * 0.8)
@@ -169,4 +171,5 @@ if main_file is not None:
             st.pyplot(fig4)
 
 else:
-    st.info("👆 Please upload a CSV file with a 'value' column to start.")
+    st.info("👆 Please upload a CSV or Excel file to start.")
+
