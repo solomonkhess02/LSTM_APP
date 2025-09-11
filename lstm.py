@@ -14,16 +14,16 @@ st.title("📈 LSTM Time Series Demo")
 # Upload main dataset
 # ----------------------
 st.subheader("📂 Upload Training Data (CSV or Excel)")
-main_file = st.file_uploader("Upload a CSV or Excel file", type=['csv', 'xlsx', 'xls'])
+main_file = st.file_uploader("Upload a CSV or Excel file for training", type=['csv', 'xlsx', 'xls'])
 
 if main_file is not None:
-    # Load file based on extension
+    # Load training dataset
     if main_file.name.endswith(".csv"):
         df_series = pd.read_csv(main_file)
     else:
         df_series = pd.read_excel(main_file)
 
-    st.write("📊 Data Preview", df_series.head())
+    st.write("📊 Training Data Preview", df_series.head())
 
     # Let user pick the column
     col_choice = st.selectbox("Select the column to use for training:", df_series.columns)
@@ -111,6 +111,7 @@ if main_file is not None:
             st.session_state["model"] = model
             st.session_state["scaler"] = scaler
             st.session_state["window_size"] = window_size
+            st.session_state["col_choice"] = col_choice
 
             # Predict on internal test set
             y_pred_train = model.predict(X_train)
@@ -155,9 +156,7 @@ if main_file is not None:
             ax3.legend()
             st.pyplot(fig3)
 
-            # ----------------------
             # Error distributions
-            # ----------------------
             train_errors = y_train_inv.flatten() - y_pred_train_inv.flatten()
             test_errors = y_test_inv.flatten() - y_pred_test_inv.flatten()
 
@@ -170,6 +169,55 @@ if main_file is not None:
             ax4.legend()
             st.pyplot(fig4)
 
+    # ----------------------
+    # External Test Dataset
+    # ----------------------
+    st.subheader("📂 Upload External Test Data (Optional)")
+    test_file = st.file_uploader("Upload a separate CSV or Excel file for testing", type=['csv', 'xlsx', 'xls'])
+
+    if test_file is not None and "model" in st.session_state:
+        if test_file.name.endswith(".csv"):
+            df_test = pd.read_csv(test_file)
+        else:
+            df_test = pd.read_excel(test_file)
+
+        st.write("📊 External Test Data Preview", df_test.head())
+
+        # Ensure same column is present
+        if st.session_state["col_choice"] not in df_test.columns:
+            st.error(f"❌ Column '{st.session_state['col_choice']}' not found in external test file.")
+        else:
+            series_test = df_test[[st.session_state["col_choice"]]]
+            scaler = st.session_state["scaler"]
+            window_size = st.session_state["window_size"]
+            model = st.session_state["model"]
+
+            # Scale
+            scaled_test = scaler.transform(series_test.values.reshape(-1, 1))
+
+            # Create windows
+            X_ext, y_ext = create_windows(scaled_test, window_size)
+            if X_ext.shape[0] == 0:
+                st.error("❌ Window size too large for external test file.")
+            else:
+                X_ext = X_ext.reshape((X_ext.shape[0], X_ext.shape[1], 1))
+
+                # Predict
+                y_pred_ext = model.predict(X_ext)
+                y_ext_inv = scaler.inverse_transform(y_ext.reshape(-1, 1))
+                y_pred_ext_inv = scaler.inverse_transform(y_pred_ext)
+
+                # R² score
+                r2_ext = r2_score(y_ext_inv, y_pred_ext_inv)
+                st.success(f"📊 External Test R² = {r2_ext:.4f}")
+
+                # Plot
+                fig5, ax5 = plt.subplots()
+                ax5.plot(y_ext_inv, label="Actual (External Test)", color="blue")
+                ax5.plot(y_pred_ext_inv, label="Prediction", color="red")
+                ax5.legend()
+                ax5.set_title("Prediction vs Actual (External Test)")
+                st.pyplot(fig5)
+
 else:
     st.info("👆 Please upload a CSV or Excel file to start.")
-
