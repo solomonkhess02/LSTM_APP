@@ -95,7 +95,7 @@ if main_file is not None:
             with c3:
                 batch_size = st.slider("Batch Size", 8, 256, 32, 1)
                 num_epochs = st.slider("Epochs", 5, 300, 30, 5)
-                val_split = st.slider("Validation Split", 0.0, 0.4, 0.2, 0.05)
+                val_split = st.slider("Validation Split (optional)", 0.0, 0.4, 0.0, 0.05)
 
             # ----------------------
             # Layer Config
@@ -109,7 +109,7 @@ if main_file is not None:
                 layer_dropouts.append(dropout)
 
             # ----------------------
-            # Scaling
+            # Scaling (fit on full data)
             # ----------------------
             scaler_X = MinMaxScaler()
             scaler_y = MinMaxScaler()
@@ -117,22 +117,17 @@ if main_file is not None:
             scaled_y = scaler_y.fit_transform(y)
 
             # ----------------------
-            # Train/Test split and windowing
+            # Create sequence windows (no test split)
             # ----------------------
-            train_size = int(len(scaled_X) * 0.8)
-            train_X, test_X = scaled_X[:train_size], scaled_X[train_size:]
-            train_y, test_y = scaled_y[:train_size], scaled_y[train_size:]
+            X_seq, y_seq = create_windows_multivariate(scaled_X, scaled_y, window_size)
 
-            X_train, y_train = create_windows_multivariate(train_X, train_y, window_size)
-            X_test, y_test = create_windows_multivariate(test_X, test_y, window_size)
-
-            if X_train.shape[0] == 0 or X_test.shape[0] == 0:
+            if X_seq.shape[0] == 0:
                 st.error("❌ Window size too large relative to dataset length.")
             else:
                 if st.button("🚀 Train LSTM Model"):
                     n_features = len(feature_cols)
 
-                    # Build LSTM model
+                    # Build model
                     model = Sequential()
                     for i in range(num_layers):
                         return_sequences = (i < num_layers - 1)
@@ -157,75 +152,51 @@ if main_file is not None:
 
                     model.compile(loss=loss_fn, optimizer=optimizer)
 
-                    # Train
+                    # Train (no early stopping, no shuffling)
                     history = model.fit(
-                        X_train, y_train,
+                        X_seq, y_seq,
                         epochs=num_epochs,
                         batch_size=batch_size,
-                        verbose=0,
+                        verbose=1,
                         validation_split=val_split,
                         shuffle=False
                     )
 
-                    # Predictions
-                    y_pred_train = model.predict(X_train, verbose=0)
-                    y_pred_test = model.predict(X_test, verbose=0)
+                    # Predictions on the full dataset
+                    y_pred = model.predict(X_seq, verbose=0)
 
-                    y_train_inv = scaler_y.inverse_transform(y_train.reshape(-1, 1))
-                    y_test_inv = scaler_y.inverse_transform(y_test.reshape(-1, 1))
-                    y_pred_train_inv = scaler_y.inverse_transform(y_pred_train)
-                    y_pred_test_inv = scaler_y.inverse_transform(y_pred_test)
+                    y_true_inv = scaler_y.inverse_transform(y_seq.reshape(-1, 1))
+                    y_pred_inv = scaler_y.inverse_transform(y_pred)
 
-                    r2_train = r2_score(y_train_inv, y_pred_train_inv)
-                    r2_test = r2_score(y_test_inv, y_pred_test_inv)
-                    st.success(f"✅ Model trained! Train R² = {r2_train:.4f}, Test R² = {r2_test:.4f}")
+                    r2_full = r2_score(y_true_inv, y_pred_inv)
+                    st.success(f"✅ Model trained! Full-data R² = {r2_full:.4f}")
 
                     # ----------------------
                     # Plots
                     # ----------------------
-                    colA, colB = st.columns(2)
-                    with colA:
-                        fig1, ax1 = plt.subplots()
-                        ax1.plot(y_test_inv, label='Actual (Test)', color='orange')
-                        ax1.plot(y_pred_test_inv, label='Prediction', color='red')
-                        ax1.legend()
-                        ax1.set_title("Prediction vs Actual (Internal Test)")
-                        st.pyplot(fig1)
+                    fig1, ax1 = plt.subplots()
+                    ax1.plot(y_true_inv, label='Actual', color='blue')
+                    ax1.plot(y_pred_inv, label='Predicted', color='red', alpha=0.7)
+                    ax1.legend()
+                    ax1.set_title("Predicted vs Actual (Full Dataset)")
+                    st.pyplot(fig1)
 
-                    with colB:
-                        fig2, ax2 = plt.subplots()
-                        ax2.scatter(y_test_inv, y_pred_test_inv, alpha=0.6, color='green')
-                        lim_min = float(min(y_test_inv.min(), y_pred_test_inv.min()))
-                        lim_max = float(max(y_test_inv.max(), y_pred_test_inv.max()))
-                        ax2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
-                        ax2.set_xlabel("Actual")
-                        ax2.set_ylabel("Predicted")
-                        ax2.set_title("Parity Plot (Test Data)")
-                        st.pyplot(fig2)
+                    fig2, ax2 = plt.subplots()
+                    ax2.scatter(y_true_inv, y_pred_inv, alpha=0.6, color='purple')
+                    lim_min = float(min(y_true_inv.min(), y_pred_inv.min()))
+                    lim_max = float(max(y_true_inv.max(), y_pred_inv.max()))
+                    ax2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
+                    ax2.set_xlabel("Actual")
+                    ax2.set_ylabel("Predicted")
+                    ax2.set_title("Parity Plot (Full Data)")
+                    st.pyplot(fig2)
 
                     fig3, ax3 = plt.subplots()
-                    ax3.plot(y_train_inv, label='Actual (Train)', color='blue')
-                    ax3.plot(y_pred_train_inv, label='Predicted (Train)', color='red', alpha=0.7)
-                    ax3.set_title("Predicted vs Actual (Training Data)")
+                    ax3.plot(history.history['loss'], label="Training Loss")
+                    if 'val_loss' in history.history and val_split > 0:
+                        ax3.plot(history.history['val_loss'], label="Validation Loss")
+                    ax3.set_title(f"Training vs Validation Loss ({loss_fn.upper()})")
+                    ax3.set_xlabel("Epochs")
+                    ax3.set_ylabel("Loss")
                     ax3.legend()
                     st.pyplot(fig3)
-
-                    fig4, ax4 = plt.subplots()
-                    ax4.scatter(y_train_inv, y_pred_train_inv, alpha=0.6, color='purple')
-                    lim_min = float(min(y_train_inv.min(), y_pred_train_inv.min()))
-                    lim_max = float(max(y_train_inv.max(), y_pred_train_inv.max()))
-                    ax4.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
-                    ax4.set_xlabel("Actual")
-                    ax4.set_ylabel("Predicted")
-                    ax4.set_title("Parity Plot (Training Data)")
-                    st.pyplot(fig4)
-
-                    fig5, ax5 = plt.subplots()
-                    ax5.plot(history.history['loss'], label="Training Loss")
-                    if 'val_loss' in history.history:
-                        ax5.plot(history.history['val_loss'], label="Validation Loss")
-                    ax5.set_title(f"Training vs Validation Loss ({loss_fn.upper()})")
-                    ax5.set_xlabel("Epochs")
-                    ax5.set_ylabel("Loss")
-                    ax5.legend()
-                    st.pyplot(fig5)
