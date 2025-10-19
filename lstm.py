@@ -166,6 +166,7 @@ if train_file is not None:
                     st.session_state['scaler_y'] = scaler_y
                     st.session_state['window_size'] = window_size
                     st.session_state['feature_cols'] = feature_cols
+                    st.session_state['target_col'] = target_col
 
                     # Full dataset prediction
                     y_pred = model.predict(X_seq, verbose=0)
@@ -216,34 +217,40 @@ if test_file is not None:
         st.write("📊 Test Data Preview")
         st.dataframe(df_test.head())
 
+        # Select only features used in training
         feature_cols = st.session_state['feature_cols']
-        target_col = df_test.columns[-1]  # Assume last column is target
+        target_col = st.session_state['target_col']
 
-        if all(col in df_test.columns for col in feature_cols + [target_col]):
+        missing_features = [f for f in feature_cols if f not in df_test.columns]
+        if missing_features:
+            st.error(f"❌ Test data missing these required features: {missing_features}")
+        else:
             df_test_numeric = df_test[feature_cols + [target_col]].apply(pd.to_numeric, errors='coerce').dropna()
             if df_test_numeric.empty:
-                st.error("❌ No numeric data in test file after cleaning.")
+                st.error("❌ No numeric test data after cleaning.")
             else:
                 X_test = df_test_numeric[feature_cols].values
                 y_test = df_test_numeric[[target_col]].values
 
-                # Scale with training scalers
+                # Scale using training scalers
                 X_test_scaled = st.session_state['scaler_X'].transform(X_test)
                 y_test_scaled = st.session_state['scaler_y'].transform(y_test)
 
+                # Create test sequences
                 X_test_seq, y_test_seq = create_windows_multivariate(X_test_scaled, y_test_scaled, st.session_state['window_size'])
 
                 if X_test_seq.shape[0] == 0:
-                    st.error("❌ Window size too large for test dataset.")
+                    st.error("❌ Window size too large for test data.")
                 else:
                     if st.button("📊 Predict on Test Data"):
                         y_test_pred_scaled = st.session_state['model'].predict(X_test_seq, verbose=0)
-                        y_test_true_inv = st.session_state['scaler_y'].inverse_transform(y_test_seq.reshape(-1, 1))
+                        y_test_true_inv = st.session_state['scaler_y'].inverse_transform(y_test_seq.reshape(-1,1))
                         y_test_pred_inv = st.session_state['scaler_y'].inverse_transform(y_test_pred_scaled)
 
                         r2_test = r2_score(y_test_true_inv, y_test_pred_inv)
                         st.success(f"✅ Test R² = {r2_test:.4f}")
 
+                        # Plots
                         fig_t1, ax_t1 = plt.subplots()
                         ax_t1.plot(y_test_true_inv, label='Actual')
                         ax_t1.plot(y_test_pred_inv, label='Predicted', alpha=0.7)
@@ -260,5 +267,3 @@ if test_file is not None:
                         ax_t2.set_ylabel("Predicted")
                         ax_t2.set_title("Parity Plot (Test)")
                         st.pyplot(fig_t2)
-        else:
-            st.error("❌ Test file does not contain all required features + target column.")
