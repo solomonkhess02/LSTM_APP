@@ -17,7 +17,7 @@ st.set_page_config(page_title="LSTM Time Series Demo (Multi-feature)", layout="w
 st.title("📈 LSTM Time Series Demo (Multi-feature)")
 
 # ----------------------
-# Set random seed
+# Random Seed Control
 # ----------------------
 st.sidebar.subheader("🧮 Random Seed Control")
 seed_val = st.sidebar.number_input("Set Random Seed", min_value=0, max_value=9999, value=42, step=1)
@@ -34,18 +34,20 @@ set_random_seed(seed_val)
 # ----------------------
 # Helper functions
 # ----------------------
-def load_any(main_file, purpose="Training"):
-    if any(main_file.name.endswith(x) for x in [".xlsx", ".xls"]):
-        excel_file = pd.ExcelFile(main_file)
+def load_any(file, purpose="Training"):
+    """Load CSV or Excel with optional sheet selection."""
+    if any(file.name.endswith(x) for x in [".xlsx", ".xls"]):
+        excel_file = pd.ExcelFile(file)
         sheet_names = excel_file.sheet_names
         sheet_choice = st.selectbox(f"Select Sheet for {purpose} Data:", sheet_names, key=f"{purpose}_sheet")
         df = excel_file.parse(sheet_choice)
     else:
-        df = pd.read_csv(main_file)
+        df = pd.read_csv(file)
         st.caption(f"{purpose} data loaded from CSV")
     return df
 
 def create_windows_multivariate(X, y, window):
+    """Create sequences for LSTM."""
     Xs, ys = [], []
     for i in range(len(X) - window):
         Xs.append(X[i:i+window, :])
@@ -53,28 +55,27 @@ def create_windows_multivariate(X, y, window):
     return np.array(Xs), np.array(ys)
 
 # ----------------------
-# Upload training data
+# Upload Training Data
 # ----------------------
 st.subheader("📂 Upload Training Data (CSV or Excel)")
-main_file = st.file_uploader("Upload a CSV or Excel file for training", type=['csv', 'xlsx', 'xls'])
+train_file = st.file_uploader("Upload a CSV or Excel file for training", type=['csv', 'xlsx', 'xls'], key="train_file")
 
-if main_file is not None:
-    df_series = load_any(main_file, purpose="Training")
+if train_file is not None:
+    df_train = load_any(train_file, purpose="Training")
     st.write("📊 Training Data Preview")
-    st.dataframe(df_series.head())
+    st.dataframe(df_train.head())
 
     # Column selection
     with st.expander("Column Selection", expanded=True):
-        all_cols = list(df_series.columns)
+        all_cols = list(df_train.columns)
         feature_cols = st.multiselect("Select Features (Inputs):", all_cols)
         target_col = st.selectbox("Select Target (Output):", [c for c in all_cols if c not in feature_cols])
 
     proceed = feature_cols and target_col
     if proceed:
-        df_numeric = df_series[feature_cols + [target_col]].apply(pd.to_numeric, errors='coerce').dropna()
-
+        df_numeric = df_train[feature_cols + [target_col]].apply(pd.to_numeric, errors='coerce').dropna()
         if df_numeric.empty:
-            st.error("❌ After numeric conversion and NA dropping, no data remains.")
+            st.error("❌ No numeric data after cleaning.")
         else:
             X = df_numeric[feature_cols].values
             y = df_numeric[[target_col]].values
@@ -95,10 +96,10 @@ if main_file is not None:
             with c3:
                 batch_size = st.slider("Batch Size", 8, 256, 32, 1)
                 num_epochs = st.slider("Epochs", 5, 300, 30, 5)
-                val_split = st.slider("Validation Split (optional)", 0.0, 0.4, 0.0, 0.05)
+                val_split = st.slider("Validation Split", 0.0, 0.4, 0.0, 0.05)
 
             # ----------------------
-            # Layer Config
+            # Layer Configuration
             # ----------------------
             st.subheader("🧠 LSTM Layer Configuration")
             layer_neurons, layer_dropouts = [], []
@@ -109,20 +110,18 @@ if main_file is not None:
                 layer_dropouts.append(dropout)
 
             # ----------------------
-            # Scaling (fit on full data)
+            # Scale Data
             # ----------------------
             scaler_X = MinMaxScaler()
             scaler_y = MinMaxScaler()
-            scaled_X = scaler_X.fit_transform(X)
-            scaled_y = scaler_y.fit_transform(y)
+            X_scaled = scaler_X.fit_transform(X)
+            y_scaled = scaler_y.fit_transform(y)
 
-            # ----------------------
-            # Create sequence windows (no test split)
-            # ----------------------
-            X_seq, y_seq = create_windows_multivariate(scaled_X, scaled_y, window_size)
+            # Sequence windows
+            X_seq, y_seq = create_windows_multivariate(X_scaled, y_scaled, window_size)
 
             if X_seq.shape[0] == 0:
-                st.error("❌ Window size too large relative to dataset length.")
+                st.error("❌ Window size too large for dataset.")
             else:
                 if st.button("🚀 Train LSTM Model"):
                     n_features = len(feature_cols)
@@ -130,19 +129,18 @@ if main_file is not None:
                     # Build model
                     model = Sequential()
                     for i in range(num_layers):
-                        return_sequences = (i < num_layers - 1)
+                        return_seq = (i < num_layers - 1)
                         model.add(LSTM(
                             layer_neurons[i],
                             activation=activation_fn,
-                            return_sequences=return_sequences,
+                            return_sequences=return_seq,
                             input_shape=(window_size, n_features) if i == 0 else None
                         ))
                         if layer_dropouts[i] > 0:
                             model.add(Dropout(layer_dropouts[i]))
-
                     model.add(Dense(1))
 
-                    # Optimizer setup
+                    # Optimizer
                     if optimizer_choice == "Adam":
                         optimizer = Adam(learning_rate=learning_rate)
                     elif optimizer_choice == "RMSprop":
@@ -152,112 +150,115 @@ if main_file is not None:
 
                     model.compile(loss=loss_fn, optimizer=optimizer)
 
-                    # Train (no early stopping, no shuffling)
+                    # Train
                     history = model.fit(
                         X_seq, y_seq,
                         epochs=num_epochs,
                         batch_size=batch_size,
-                        verbose=1,
                         validation_split=val_split,
-                        shuffle=False
+                        shuffle=False,
+                        verbose=1
                     )
 
-                    # Predictions on the full dataset
-                    y_pred = model.predict(X_seq, verbose=0)
+                    # Store model & scalers in session_state
+                    st.session_state['model'] = model
+                    st.session_state['scaler_X'] = scaler_X
+                    st.session_state['scaler_y'] = scaler_y
+                    st.session_state['window_size'] = window_size
+                    st.session_state['feature_cols'] = feature_cols
 
+                    # Full dataset prediction
+                    y_pred = model.predict(X_seq, verbose=0)
                     y_true_inv = scaler_y.inverse_transform(y_seq.reshape(-1, 1))
                     y_pred_inv = scaler_y.inverse_transform(y_pred)
-
                     r2_full = r2_score(y_true_inv, y_pred_inv)
-                    st.success(f"✅ Model trained! Full-data R² = {r2_full:.4f}")
+                    st.success(f"✅ Training R² = {r2_full:.4f}")
 
-                    # ----------------------
                     # Plots
-                    # ----------------------
                     fig1, ax1 = plt.subplots()
-                    ax1.plot(y_true_inv, label='Actual', color='blue')
-                    ax1.plot(y_pred_inv, label='Predicted', color='red', alpha=0.7)
+                    ax1.plot(y_true_inv, label='Actual')
+                    ax1.plot(y_pred_inv, label='Predicted', alpha=0.7)
                     ax1.legend()
-                    ax1.set_title("Predicted vs Actual (Full Dataset)")
+                    ax1.set_title("Predicted vs Actual (Training)")
                     st.pyplot(fig1)
 
                     fig2, ax2 = plt.subplots()
                     ax2.scatter(y_true_inv, y_pred_inv, alpha=0.6, color='purple')
-                    lim_min = float(min(y_true_inv.min(), y_pred_inv.min()))
-                    lim_max = float(max(y_true_inv.max(), y_pred_inv.max()))
+                    lim_min = min(y_true_inv.min(), y_pred_inv.min())
+                    lim_max = max(y_true_inv.max(), y_pred_inv.max())
                     ax2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
                     ax2.set_xlabel("Actual")
                     ax2.set_ylabel("Predicted")
-                    ax2.set_title("Parity Plot (Full Data)")
+                    ax2.set_title("Parity Plot (Training)")
                     st.pyplot(fig2)
 
                     fig3, ax3 = plt.subplots()
-                    ax3.plot(history.history['loss'], label="Training Loss")
-                    if 'val_loss' in history.history and val_split > 0:
-                        ax3.plot(history.history['val_loss'], label="Validation Loss")
-                    ax3.set_title(f"Training vs Validation Loss ({loss_fn.upper()})")
+                    ax3.plot(history.history['loss'], label='Training Loss')
+                    if val_split > 0 and 'val_loss' in history.history:
+                        ax3.plot(history.history['val_loss'], label='Validation Loss')
                     ax3.set_xlabel("Epochs")
                     ax3.set_ylabel("Loss")
                     ax3.legend()
+                    ax3.set_title("Loss Curve")
                     st.pyplot(fig3)
 
-            # ----------------------
-            # Upload test data
-            # ----------------------
-            st.subheader("📂 Upload Test Data (CSV or Excel)")
-            test_file = st.file_uploader("Upload a CSV or Excel file for testing", type=['csv', 'xlsx', 'xls'], key="test_file")
-            
-            if test_file is not None and proceed:
-                df_test = load_any(test_file, purpose="Test")
-                st.write("📊 Test Data Preview")
-                st.dataframe(df_test.head())
-            
-                # Ensure columns match training features + target
-                if all(col in df_test.columns for col in feature_cols + [target_col]):
-                    df_test_numeric = df_test[feature_cols + [target_col]].apply(pd.to_numeric, errors='coerce').dropna()
-            
-                    if df_test_numeric.empty:
-                        st.error("❌ After numeric conversion and NA dropping, no test data remains.")
-                    else:
-                        X_test = df_test_numeric[feature_cols].values
-                        y_test = df_test_numeric[[target_col]].values
-            
-                        # Scale using training data scalers
-                        X_test_scaled = scaler_X.transform(X_test)
-                        y_test_scaled = scaler_y.transform(y_test)
-            
-                        # Create sequence windows for test
-                        X_test_seq, y_test_seq = create_windows_multivariate(X_test_scaled, y_test_scaled, window_size)
-            
-                        if X_test_seq.shape[0] == 0:
-                            st.error("❌ Window size too large relative to test dataset length.")
-                        else:
-                            if st.button("📊 Predict on Test Data"):
-                                y_test_pred_scaled = model.predict(X_test_seq, verbose=0)
-                                y_test_true_inv = scaler_y.inverse_transform(y_test_seq.reshape(-1, 1))
-                                y_test_pred_inv = scaler_y.inverse_transform(y_test_pred_scaled)
-            
-                                r2_test = r2_score(y_test_true_inv, y_test_pred_inv)
-                                st.success(f"✅ Test R² = {r2_test:.4f}")
-            
-                                # ----------------------
-                                # Test Plots
-                                # ----------------------
-                                fig_test1, ax_test1 = plt.subplots()
-                                ax_test1.plot(y_test_true_inv, label='Actual', color='blue')
-                                ax_test1.plot(y_test_pred_inv, label='Predicted', color='red', alpha=0.7)
-                                ax_test1.legend()
-                                ax_test1.set_title("Predicted vs Actual (Test Data)")
-                                st.pyplot(fig_test1)
-            
-                                fig_test2, ax_test2 = plt.subplots()
-                                ax_test2.scatter(y_test_true_inv, y_test_pred_inv, alpha=0.6, color='purple')
-                                lim_min = float(min(y_test_true_inv.min(), y_test_pred_inv.min()))
-                                lim_max = float(max(y_test_true_inv.max(), y_test_pred_inv.max()))
-                                ax_test2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
-                                ax_test2.set_xlabel("Actual")
-                                ax_test2.set_ylabel("Predicted")
-                                ax_test2.set_title("Parity Plot (Test Data)")
-                                st.pyplot(fig_test2)
+# ----------------------
+# Upload Test Data
+# ----------------------
+st.subheader("📂 Upload Test Data (CSV or Excel)")
+test_file = st.file_uploader("Upload a CSV or Excel file for testing", type=['csv', 'xlsx', 'xls'], key="test_file")
+
+if test_file is not None:
+    if 'model' not in st.session_state:
+        st.warning("⚠️ Train the model first before testing.")
+    else:
+        df_test = load_any(test_file, purpose="Test")
+        st.write("📊 Test Data Preview")
+        st.dataframe(df_test.head())
+
+        feature_cols = st.session_state['feature_cols']
+        target_col = df_test.columns[-1]  # Assume last column is target
+
+        if all(col in df_test.columns for col in feature_cols + [target_col]):
+            df_test_numeric = df_test[feature_cols + [target_col]].apply(pd.to_numeric, errors='coerce').dropna()
+            if df_test_numeric.empty:
+                st.error("❌ No numeric data in test file after cleaning.")
+            else:
+                X_test = df_test_numeric[feature_cols].values
+                y_test = df_test_numeric[[target_col]].values
+
+                # Scale with training scalers
+                X_test_scaled = st.session_state['scaler_X'].transform(X_test)
+                y_test_scaled = st.session_state['scaler_y'].transform(y_test)
+
+                X_test_seq, y_test_seq = create_windows_multivariate(X_test_scaled, y_test_scaled, st.session_state['window_size'])
+
+                if X_test_seq.shape[0] == 0:
+                    st.error("❌ Window size too large for test dataset.")
                 else:
-                    st.error("❌ Test data does not contain all selected training features + target column.")
+                    if st.button("📊 Predict on Test Data"):
+                        y_test_pred_scaled = st.session_state['model'].predict(X_test_seq, verbose=0)
+                        y_test_true_inv = st.session_state['scaler_y'].inverse_transform(y_test_seq.reshape(-1, 1))
+                        y_test_pred_inv = st.session_state['scaler_y'].inverse_transform(y_test_pred_scaled)
+
+                        r2_test = r2_score(y_test_true_inv, y_test_pred_inv)
+                        st.success(f"✅ Test R² = {r2_test:.4f}")
+
+                        fig_t1, ax_t1 = plt.subplots()
+                        ax_t1.plot(y_test_true_inv, label='Actual')
+                        ax_t1.plot(y_test_pred_inv, label='Predicted', alpha=0.7)
+                        ax_t1.legend()
+                        ax_t1.set_title("Predicted vs Actual (Test)")
+                        st.pyplot(fig_t1)
+
+                        fig_t2, ax_t2 = plt.subplots()
+                        ax_t2.scatter(y_test_true_inv, y_test_pred_inv, alpha=0.6, color='purple')
+                        lim_min = min(y_test_true_inv.min(), y_test_pred_inv.min())
+                        lim_max = max(y_test_true_inv.max(), y_test_pred_inv.max())
+                        ax_t2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
+                        ax_t2.set_xlabel("Actual")
+                        ax_t2.set_ylabel("Predicted")
+                        ax_t2.set_title("Parity Plot (Test)")
+                        st.pyplot(fig_t2)
+        else:
+            st.error("❌ Test file does not contain all required features + target column.")
