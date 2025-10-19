@@ -200,3 +200,64 @@ if main_file is not None:
                     ax3.set_ylabel("Loss")
                     ax3.legend()
                     st.pyplot(fig3)
+
+            # ----------------------
+            # Upload test data
+            # ----------------------
+            st.subheader("📂 Upload Test Data (CSV or Excel)")
+            test_file = st.file_uploader("Upload a CSV or Excel file for testing", type=['csv', 'xlsx', 'xls'], key="test_file")
+            
+            if test_file is not None and proceed:
+                df_test = load_any(test_file, purpose="Test")
+                st.write("📊 Test Data Preview")
+                st.dataframe(df_test.head())
+            
+                # Ensure columns match training features + target
+                if all(col in df_test.columns for col in feature_cols + [target_col]):
+                    df_test_numeric = df_test[feature_cols + [target_col]].apply(pd.to_numeric, errors='coerce').dropna()
+            
+                    if df_test_numeric.empty:
+                        st.error("❌ After numeric conversion and NA dropping, no test data remains.")
+                    else:
+                        X_test = df_test_numeric[feature_cols].values
+                        y_test = df_test_numeric[[target_col]].values
+            
+                        # Scale using training data scalers
+                        X_test_scaled = scaler_X.transform(X_test)
+                        y_test_scaled = scaler_y.transform(y_test)
+            
+                        # Create sequence windows for test
+                        X_test_seq, y_test_seq = create_windows_multivariate(X_test_scaled, y_test_scaled, window_size)
+            
+                        if X_test_seq.shape[0] == 0:
+                            st.error("❌ Window size too large relative to test dataset length.")
+                        else:
+                            if st.button("📊 Predict on Test Data"):
+                                y_test_pred_scaled = model.predict(X_test_seq, verbose=0)
+                                y_test_true_inv = scaler_y.inverse_transform(y_test_seq.reshape(-1, 1))
+                                y_test_pred_inv = scaler_y.inverse_transform(y_test_pred_scaled)
+            
+                                r2_test = r2_score(y_test_true_inv, y_test_pred_inv)
+                                st.success(f"✅ Test R² = {r2_test:.4f}")
+            
+                                # ----------------------
+                                # Test Plots
+                                # ----------------------
+                                fig_test1, ax_test1 = plt.subplots()
+                                ax_test1.plot(y_test_true_inv, label='Actual', color='blue')
+                                ax_test1.plot(y_test_pred_inv, label='Predicted', color='red', alpha=0.7)
+                                ax_test1.legend()
+                                ax_test1.set_title("Predicted vs Actual (Test Data)")
+                                st.pyplot(fig_test1)
+            
+                                fig_test2, ax_test2 = plt.subplots()
+                                ax_test2.scatter(y_test_true_inv, y_test_pred_inv, alpha=0.6, color='purple')
+                                lim_min = float(min(y_test_true_inv.min(), y_test_pred_inv.min()))
+                                lim_max = float(max(y_test_true_inv.max(), y_test_pred_inv.max()))
+                                ax_test2.plot([lim_min, lim_max], [lim_min, lim_max], 'r--')
+                                ax_test2.set_xlabel("Actual")
+                                ax_test2.set_ylabel("Predicted")
+                                ax_test2.set_title("Parity Plot (Test Data)")
+                                st.pyplot(fig_test2)
+                else:
+                    st.error("❌ Test data does not contain all selected training features + target column.")
