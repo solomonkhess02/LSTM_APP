@@ -50,8 +50,8 @@ def create_windows_multivariate(X, y, window):
     """Create sequences for LSTM."""
     Xs, ys = [], []
     for i in range(len(X) - window):
-        Xs.append(X[i:i+window, :])
-        ys.append(y[i+window, 0])
+        Xs.append(X[i:i+window])
+        ys.append(y[i+window])
     return np.array(Xs), np.array(ys)
 
 # ----------------------
@@ -267,3 +267,4 @@ if test_file is not None:
                         ax_t2.set_ylabel("Predicted")
                         ax_t2.set_title("Parity Plot (Test)")
                         st.pyplot(fig_t2)
+
