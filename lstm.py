@@ -170,7 +170,8 @@ if train_file is not None:
 
                     # Full dataset prediction
                     y_pred = model.predict(X_seq, verbose=0)
-                    y_true_inv = scaler_y.inverse_transform(y_seq.reshape(-1, 1))
+                    # y_true_inv = scaler_y.inverse_transform(y_seq.reshape(-1, 1))
+                    y_true_inv = scaler_y.inverse_transform(y_seq) # No reshape needed now
                     y_pred_inv = scaler_y.inverse_transform(y_pred)
                     r2_full = r2_score(y_true_inv, y_pred_inv)
                     st.success(f"✅ Training R² = {r2_full:.4f}")
@@ -267,4 +268,5 @@ if test_file is not None:
                         ax_t2.set_ylabel("Predicted")
                         ax_t2.set_title("Parity Plot (Test)")
                         st.pyplot(fig_t2)
+
 
