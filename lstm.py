@@ -109,15 +109,16 @@ if train_file is not None:
                 layer_neurons.append(neurons)
                 layer_dropouts.append(dropout)
             # ----------------------  
-            # Shape Debug Info (Testing)
+            # Shape Debug Info (Training)
             # ----------------------
-            with st.expander("🔍 Data Shape Diagnostics (Test)", expanded=False):
-                st.write(f"**Raw X_test:** {X_test.shape}")
-                st.write(f"**Raw y_test:** {y_test.shape}")
-                st.write(f"**Scaled X_test:** {X_test_scaled.shape}")
-                st.write(f"**Scaled y_test:** {y_test_scaled.shape}")
-                st.write(f"**Sequence X_test_seq:** {X_test_seq.shape}")
-                st.write(f"**Sequence y_test_seq:** {y_test_seq.shape}")
+            with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
+                st.write(f"**Raw X_train:** {X.shape}")
+                st.write(f"**Raw y_train:** {y.shape}")
+                st.write(f"**Scaled X_train:** {X_scaled.shape}")
+                st.write(f"**Scaled y_train:** {y_scaled.shape}")
+                st.write(f"**Sequence X_seq:** {X_seq.shape}")
+                st.write(f"**Sequence y_seq:** {y_seq.shape}")
+                st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
 
             # ----------------------
             # Scale Data
@@ -172,15 +173,17 @@ if train_file is not None:
                     model.compile(loss=loss_fn, optimizer=optimizer)
 
                     # ----------------------  
-                    # Shape Debug Info (Testing)
+                    # Shape Debug Info (Training)
                     # ----------------------
-                    with st.expander("🔍 Data Shape Diagnostics (Test)", expanded=False):
-                        st.write(f"**Raw X_test:** {X_test.shape}")
-                        st.write(f"**Raw y_test:** {y_test.shape}")
-                        st.write(f"**Scaled X_test:** {X_test_scaled.shape}")
-                        st.write(f"**Scaled y_test:** {y_test_scaled.shape}")
-                        st.write(f"**Sequence X_test_seq:** {X_test_seq.shape}")
-                        st.write(f"**Sequence y_test_seq:** {y_test_seq.shape}")
+                    with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
+                        st.write(f"**Raw X_train:** {X.shape}")
+                        st.write(f"**Raw y_train:** {y.shape}")
+                        st.write(f"**Scaled X_train:** {X_scaled.shape}")
+                        st.write(f"**Scaled y_train:** {y_scaled.shape}")
+                        st.write(f"**Sequence X_seq:** {X_seq.shape}")
+                        st.write(f"**Sequence y_seq:** {y_seq.shape}")
+                        st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
+
 
                     # Train
                     history = model.fit(
@@ -192,15 +195,17 @@ if train_file is not None:
                         verbose=1
                     )
                     # ----------------------  
-                    # Shape Debug Info (Testing)
+                    # Shape Debug Info (Training)
                     # ----------------------
-                    with st.expander("🔍 Data Shape Diagnostics (Test)", expanded=False):
-                        st.write(f"**Raw X_test:** {X_test.shape}")
-                        st.write(f"**Raw y_test:** {y_test.shape}")
-                        st.write(f"**Scaled X_test:** {X_test_scaled.shape}")
-                        st.write(f"**Scaled y_test:** {y_test_scaled.shape}")
-                        st.write(f"**Sequence X_test_seq:** {X_test_seq.shape}")
-                        st.write(f"**Sequence y_test_seq:** {y_test_seq.shape}")
+                    with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
+                        st.write(f"**Raw X_train:** {X.shape}")
+                        st.write(f"**Raw y_train:** {y.shape}")
+                        st.write(f"**Scaled X_train:** {X_scaled.shape}")
+                        st.write(f"**Scaled y_train:** {y_scaled.shape}")
+                        st.write(f"**Sequence X_seq:** {X_seq.shape}")
+                        st.write(f"**Sequence y_seq:** {y_seq.shape}")
+                        st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
+
 
                     # Store model & scalers in session_state
                     st.session_state['model'] = model
@@ -310,6 +315,7 @@ if test_file is not None:
                         ax_t2.set_ylabel("Predicted")
                         ax_t2.set_title("Parity Plot (Test)")
                         st.pyplot(fig_t2)
+
 
 
 
