@@ -108,17 +108,7 @@ if train_file is not None:
                 dropout = st.slider(f"Dropout Rate (Layer {i+1})", 0.0, 0.5, 0.2, 0.05, key=f"layer_{i+1}_dropout")
                 layer_neurons.append(neurons)
                 layer_dropouts.append(dropout)
-            # ----------------------  
-            # Shape Debug Info (Training)
-            # ----------------------
-            with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
-                st.write(f"**Raw X_train:** {X.shape}")
-                st.write(f"**Raw y_train:** {y.shape}")
-                st.write(f"**Scaled X_train:** {X_scaled.shape}")
-                st.write(f"**Scaled y_train:** {y_scaled.shape}")
-                st.write(f"**Sequence X_seq:** {X_seq.shape}")
-                st.write(f"**Sequence y_seq:** {y_seq.shape}")
-                st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
+
 
             # ----------------------
             # Scale Data
@@ -315,6 +305,7 @@ if test_file is not None:
                         ax_t2.set_ylabel("Predicted")
                         ax_t2.set_title("Parity Plot (Test)")
                         st.pyplot(fig_t2)
+
 
 
 
