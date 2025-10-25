@@ -120,18 +120,7 @@ if train_file is not None:
 
             # Sequence windows
             X_seq, y_seq = create_windows_multivariate(X_scaled, y_scaled, window_size)
-            # ----------------------  
-            # Shape Debug Info (Training)
-            # ----------------------
-            with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
-                st.write(f"**Raw X_train:** {X.shape}")
-                st.write(f"**Raw y_train:** {y.shape}")
-                st.write(f"**Scaled X_train:** {X_scaled.shape}")
-                st.write(f"**Scaled y_train:** {y_scaled.shape}")
-                st.write(f"**Sequence X_seq:** {X_seq.shape}")
-                st.write(f"**Sequence y_seq:** {y_seq.shape}")
-                st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
-
+            
             if X_seq.shape[0] == 0:
                 st.error("❌ Window size too large for dataset.")
             else:
@@ -162,18 +151,6 @@ if train_file is not None:
 
                     model.compile(loss=loss_fn, optimizer=optimizer)
 
-                    # ----------------------  
-                    # Shape Debug Info (Training)
-                    # ----------------------
-                    with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
-                        st.write(f"**Raw X_train:** {X.shape}")
-                        st.write(f"**Raw y_train:** {y.shape}")
-                        st.write(f"**Scaled X_train:** {X_scaled.shape}")
-                        st.write(f"**Scaled y_train:** {y_scaled.shape}")
-                        st.write(f"**Sequence X_seq:** {X_seq.shape}")
-                        st.write(f"**Sequence y_seq:** {y_seq.shape}")
-                        st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
-
 
                     # Train
                     history = model.fit(
@@ -184,19 +161,7 @@ if train_file is not None:
                         shuffle=False,
                         verbose=1
                     )
-                    # ----------------------  
-                    # Shape Debug Info (Training)
-                    # ----------------------
-                    with st.expander("🔍 Data Shape Diagnostics (Training)", expanded=False):
-                        st.write(f"**Raw X_train:** {X.shape}")
-                        st.write(f"**Raw y_train:** {y.shape}")
-                        st.write(f"**Scaled X_train:** {X_scaled.shape}")
-                        st.write(f"**Scaled y_train:** {y_scaled.shape}")
-                        st.write(f"**Sequence X_seq:** {X_seq.shape}")
-                        st.write(f"**Sequence y_seq:** {y_seq.shape}")
-                        st.write(f"**LSTM input shape used:** ({window_size}, {len(feature_cols)})")
-
-
+                   
                     # Store model & scalers in session_state
                     st.session_state['model'] = model
                     st.session_state['scaler_X'] = scaler_X
@@ -305,6 +270,7 @@ if test_file is not None:
                         ax_t2.set_ylabel("Predicted")
                         ax_t2.set_title("Parity Plot (Test)")
                         st.pyplot(fig_t2)
+
 
 
 
